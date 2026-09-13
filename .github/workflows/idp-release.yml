@@ -1,0 +1,79 @@
+name: IDP release
+run-name: IDP demo release ${{ inputs.VERSION }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      VERSION:
+        description: Immutable release version (example 1.0.0-test.1)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-test-publish:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 30
+    env:
+      VERSION: ${{ inputs.VERSION }}
+      IDP_URL: ${{ vars.IDP_URL }}
+      IDP_PROJECT_ID: ${{ vars.IDP_PROJECT_ID }}
+      IDP_ARTIFACT_UPLOAD_TOKEN: ${{ secrets.IDP_ARTIFACT_UPLOAD_TOKEN }}
+    steps:
+      - name: Checkout backend
+        uses: actions/checkout@v4
+        with:
+          path: source-backend
+
+      - name: Checkout frontend
+        uses: actions/checkout@v4
+        with:
+          repository: brskcygt/IDP-Demo-Frontend
+          ref: main
+          path: source-frontend
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Test backend and frontend
+        shell: powershell -NoProfile -ExecutionPolicy Bypass -Command ". '{0}'"
+        run: |
+          Set-Location source-backend
+          npm test
+          Set-Location ../source-frontend
+          npm test
+
+      - name: Stamp release version and package artifacts
+        shell: powershell -NoProfile -ExecutionPolicy Bypass -Command ". '{0}'"
+        run: |
+          if (Test-Path artifacts) { Remove-Item artifacts -Recurse -Force }
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          node source-backend/scripts/stamp-version.js $env:VERSION source-backend source-frontend
+          tar -czf "artifacts/idp-demo-backend-$env:VERSION-win-x64.tar.gz" -C source-backend server.js package.json version.json ops
+          tar -czf "artifacts/idp-demo-frontend-$env:VERSION.tar.gz" -C source-frontend index.html styles.css app.js config.js version.json web.config
+
+      - name: Publish immutable artifacts to IDP
+        shell: powershell -NoProfile -ExecutionPolicy Bypass -Command ". '{0}'"
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:IDP_URL)) { throw 'Repository variable IDP_URL is missing.' }
+          if ([string]::IsNullOrWhiteSpace($env:IDP_PROJECT_ID)) { throw 'Repository variable IDP_PROJECT_ID is missing.' }
+          if ([string]::IsNullOrWhiteSpace($env:IDP_ARTIFACT_UPLOAD_TOKEN)) { throw 'Secret IDP_ARTIFACT_UPLOAD_TOKEN is missing.' }
+          node source-backend/scripts/make-manifest.js idp-demo $env:VERSION $env:GITHUB_SHA `
+            "backend:win-x64:artifacts/idp-demo-backend-$env:VERSION-win-x64.tar.gz" `
+            "frontend:any:artifacts/idp-demo-frontend-$env:VERSION.tar.gz"
+          Move-Item "idp-demo-$env:VERSION-manifest.json" artifacts/
+          node source-backend/scripts/upload-artifacts.js `
+            --project-id $env:IDP_PROJECT_ID `
+            --version $env:VERSION `
+            --manifest "artifacts/idp-demo-$env:VERSION-manifest.json" `
+            --allow-http
+
+      - name: Mirror artifacts to GitHub Releases
+        shell: powershell -NoProfile -ExecutionPolicy Bypass -Command ". '{0}'"
+        env:
+          GITHUB_RELEASE_TOKEN: ${{ github.token }}
+        run: node source-backend/scripts/publish-github-release.js --version $env:VERSION --directory artifacts

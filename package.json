@@ -1,0 +1,13 @@
+{
+  "name": "idp-demo-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Zero-dependency backend used to validate IDP artifact deployments on Windows.",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
