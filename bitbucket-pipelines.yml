@@ -1,0 +1,58 @@
+# IDP triggers this custom pipeline and supplies VERSION through the Bitbucket API.
+# Repository variables: IDP_URL, IDP_PROJECT_ID
+# Secured repository variable: IDP_ARTIFACT_UPLOAD_TOKEN
+pipelines:
+  custom:
+    idp-release:
+      - variables:
+          - name: VERSION
+      - step:
+          name: Build, test and publish IDP demo
+          runs-on:
+            - self.hosted
+            - windows
+          script:
+            - >-
+              $ErrorActionPreference = 'Stop';
+              if ([string]::IsNullOrWhiteSpace($env:VERSION)) { throw 'VERSION is required and must be supplied by IDP.' };
+              if ([string]::IsNullOrWhiteSpace($env:IDP_URL)) { throw 'Repository variable IDP_URL is missing.' };
+              if ([string]::IsNullOrWhiteSpace($env:IDP_PROJECT_ID)) { throw 'Repository variable IDP_PROJECT_ID is missing.' };
+              if ([string]::IsNullOrWhiteSpace($env:IDP_ARTIFACT_UPLOAD_TOKEN)) { throw 'Secured variable IDP_ARTIFACT_UPLOAD_TOKEN is missing.' }
+            - node --version
+            - git --version
+            - tar --version
+            - >-
+              if (Test-Path source-frontend) { Remove-Item source-frontend -Recurse -Force };
+              git clone --depth 1 --branch main https://github.com/brskcygt/IDP-Demo-Frontend.git source-frontend;
+              if ($LASTEXITCODE -ne 0) { throw "Frontend checkout failed with exit code $LASTEXITCODE." }
+            - >-
+              & npm.cmd test;
+              if ($LASTEXITCODE -ne 0) { throw "Backend tests failed with exit code $LASTEXITCODE." };
+              Push-Location source-frontend;
+              & npm.cmd test;
+              if ($LASTEXITCODE -ne 0) { throw "Frontend tests failed with exit code $LASTEXITCODE." };
+              Pop-Location
+            - >-
+              if (Test-Path artifacts) { Remove-Item artifacts -Recurse -Force };
+              New-Item -ItemType Directory -Force artifacts | Out-Null;
+              & node scripts/stamp-version.js $env:VERSION . source-frontend;
+              if ($LASTEXITCODE -ne 0) { throw "Version stamping failed with exit code $LASTEXITCODE." };
+              & tar -czf "artifacts/idp-demo-backend-$env:VERSION-win-x64.tar.gz" -C . server.js package.json version.json ops;
+              if ($LASTEXITCODE -ne 0) { throw "Backend packaging failed with exit code $LASTEXITCODE." };
+              & tar -czf "artifacts/idp-demo-frontend-$env:VERSION.tar.gz" -C source-frontend index.html styles.css app.js config.js version.json web.config;
+              if ($LASTEXITCODE -ne 0) { throw "Frontend packaging failed with exit code $LASTEXITCODE." }
+            - >-
+              & node scripts/make-manifest.js idp-demo $env:VERSION $env:BITBUCKET_COMMIT
+              "backend:win-x64:artifacts/idp-demo-backend-$env:VERSION-win-x64.tar.gz"
+              "frontend:any:artifacts/idp-demo-frontend-$env:VERSION.tar.gz";
+              if ($LASTEXITCODE -ne 0) { throw "Manifest creation failed with exit code $LASTEXITCODE." };
+              Move-Item "idp-demo-$env:VERSION-manifest.json" artifacts/;
+              & node scripts/upload-artifacts.js
+              --project-id $env:IDP_PROJECT_ID
+              --version $env:VERSION
+              --manifest "artifacts/idp-demo-$env:VERSION-manifest.json"
+              --allow-http;
+              if ($LASTEXITCODE -ne 0) { throw "IDP artifact upload failed with exit code $LASTEXITCODE." }
+          artifacts:
+            - artifacts/**
+
