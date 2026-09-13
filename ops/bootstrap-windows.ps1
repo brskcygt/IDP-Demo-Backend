@@ -94,8 +94,11 @@ foreach ($rule in @(
   @{ Name = 'IDP Demo Frontend'; Port = $FrontendPort },
   @{ Name = 'IDP Demo Backend'; Port = $BackendPort }
 )) {
-  if (-not (Get-NetFirewallRule -DisplayName $rule.Name -ErrorAction SilentlyContinue)) {
-    New-NetFirewallRule -DisplayName $rule.Name -Direction Inbound -Action Allow -Protocol TCP -LocalPort $rule.Port -Profile Domain,Private | Out-Null
+  $existingRule = Get-NetFirewallRule -DisplayName $rule.Name -ErrorAction SilentlyContinue
+  if ($existingRule) {
+    $existingRule | Set-NetFirewallRule -Enabled True -Action Allow -Profile Any -RemoteAddress LocalSubnet | Out-Null
+  } else {
+    New-NetFirewallRule -DisplayName $rule.Name -Direction Inbound -Action Allow -Protocol TCP -LocalPort $rule.Port -Profile Any -RemoteAddress LocalSubnet | Out-Null
   }
 }
 
