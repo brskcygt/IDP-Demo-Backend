@@ -69,10 +69,10 @@ pipeline {
           & node source-backend/scripts/stamp-version.js $env:VERSION source-backend source-frontend
           if ($LASTEXITCODE -ne 0) { throw "Version stamping failed with exit code $LASTEXITCODE." }
 
-          & tar -czf "artifacts/idp-demo-backend-$env:VERSION-win-x64.tar.gz" -C source-backend server.js package.json version.json ops
+          & tar -czf "artifacts/idp-demo-backend-$env:VERSION-win-x64.tar.gz" -C source-backend server.js package.json version.json ops .env.example
           if ($LASTEXITCODE -ne 0) { throw "Backend packaging failed with exit code $LASTEXITCODE." }
 
-          & tar -czf "artifacts/idp-demo-frontend-$env:VERSION.tar.gz" -C source-frontend index.html styles.css app.js config.js version.json web.config
+          & tar -czf "artifacts/idp-demo-frontend-$env:VERSION.tar.gz" -C source-frontend index.html styles.css app.js config.js version.json web.config .env.example
           if ($LASTEXITCODE -ne 0) { throw "Frontend packaging failed with exit code $LASTEXITCODE." }
         '''
       }

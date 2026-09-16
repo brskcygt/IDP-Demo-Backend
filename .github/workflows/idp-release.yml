@@ -53,8 +53,8 @@ jobs:
           if (Test-Path artifacts) { Remove-Item artifacts -Recurse -Force }
           New-Item -ItemType Directory -Force artifacts | Out-Null
           node source-backend/scripts/stamp-version.js $env:VERSION source-backend source-frontend
-          tar -czf "artifacts/idp-demo-backend-$env:VERSION-win-x64.tar.gz" -C source-backend server.js package.json version.json ops
-          tar -czf "artifacts/idp-demo-frontend-$env:VERSION.tar.gz" -C source-frontend index.html styles.css app.js config.js version.json web.config
+          tar -czf "artifacts/idp-demo-backend-$env:VERSION-win-x64.tar.gz" -C source-backend server.js package.json version.json ops .env.example
+          tar -czf "artifacts/idp-demo-frontend-$env:VERSION.tar.gz" -C source-frontend index.html styles.css app.js config.js version.json web.config .env.example
 
       - name: Publish immutable artifacts to IDP
         shell: powershell -NoProfile -ExecutionPolicy Bypass -Command ". '{0}'"
